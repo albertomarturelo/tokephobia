@@ -62,6 +62,8 @@ export type Snapshot = {
   isLoading: boolean
 }
 
+export type MergeMethod = 'squash' | 'merge' | 'rebase'
+
 export type CheckResult = 'pass' | 'fail' | 'pending' | 'skip'
 
 /** One check of a PR. GitHub Actions jobs carry their workflow and run; other apps' checks don't. */
@@ -142,6 +144,14 @@ export type Detail = {
   mergeable: string
   /** gh's mergeStateStatus: CLEAN, BLOCKED, BEHIND, DIRTY, UNSTABLE, HAS_HOOKS, DRAFT, UNKNOWN. */
   mergeState: string
+  /** Merge flow from the pane: idle, asking which method, or merging. */
+  merge: 'idle' | 'confirm' | 'sending'
+  /** Methods the repo allows, loaded when the merge is asked for: squash, merge, rebase. */
+  mergeMethods: MergeMethod[]
+  /** The viewer is an admin of the repo, so `gh pr merge --admin` can bypass its rules. */
+  canBypass: boolean
+  /** Merge with `--admin`, bypassing required reviews and checks. Off until the person turns it on. */
+  bypass: boolean
   isLoading: boolean
   isRefreshing: boolean
   error: string | null
