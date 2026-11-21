@@ -1,0 +1,21 @@
+{
+  "name": "tokephobia",
+  "version": "0.1.0",
+  "description": "GitHub line above the prompt and a pane with issues, pull requests, milestones, workflow runs and this session's PRs",
+  "author": {
+    "name": "Alberto Marturelo Lorenzo",
+    "url": "https://github.com/albertomarturelo"
+  },
+  "homepage": "https://github.com/albertomarturelo/tokephobia",
+  "repository": "https://github.com/albertomarturelo/tokephobia",
+  "license": "MIT",
+  "keywords": [
+    "github",
+    "pull-requests",
+    "issues",
+    "milestones",
+    "ci",
+    "worktree"
+  ],
+  "types": "./types/index.d.ts"
+}

@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="659" height="418" viewBox="0 0 659 418" role="img" aria-label="PR #42">
+<style>text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace;font-size:14px;white-space:pre}</style>
+<rect width="100%" height="100%" rx="10" fill="#16161e"/>
+<rect width="100%" height="28" rx="10" fill="#22222c"/><rect y="18" width="100%" height="10" fill="#22222c"/>
+<circle cx="18" cy="14" r="5.5" fill="#ff5f57"/><circle cx="36" cy="14" r="5.5" fill="#febc2e"/><circle cx="54" cy="14" r="5.5" fill="#28c840"/>
+<text x="330" y="18" fill="#7c8190" text-anchor="middle" style="font-size:12px">PR #42</text>
+<text x="20.0" y="65" fill="#d4d4d8">[ ← back ]</text>
+<text x="106.0" y="65" fill="#d4d4d8">  </text>
+<text x="123.2" y="65" fill="#6cb6ff" text-decoration="underline">Open on GitHub</text>
+<text x="20.0" y="87" fill="#87d787" font-weight="700">#42</text>
+<text x="45.8" y="87" fill="#d4d4d8" font-weight="700"> Add filing month to the SII export</text>
+<text x="20.0" y="109" fill="#87d787" font-weight="700">● Open</text>
+<text x="71.6" y="109" fill="#ffd75f"> · blocked (reviews or checks missing)</text>
+<text x="20.0" y="131" fill="#7c8190">@ana · 3m</text>
+<text x="20.0" y="153" fill="#7c8190">feat/1295-filing-month → main · </text>
+<text x="295.2" y="153" fill="#87d787">+214</text>
+<text x="329.6" y="153" fill="#d4d4d8"> </text>
+<text x="338.2" y="153" fill="#ff5f5f">−37</text>
+<text x="364.0" y="153" fill="#7c8190"> · 9 files</text>
+<text x="20.0" y="175" fill="#d4d4d8" font-weight="700">CI</text>
+<text x="20.0" y="197" fill="#ff5f5f">✗</text>
+<text x="28.6" y="197" fill="#d4d4d8"> e2e (chromium)</text>
+<text x="20.0" y="219" fill="#ffd75f">⏳</text>
+<text x="37.2" y="219" fill="#d4d4d8"> deploy-preview</text>
+<text x="20.0" y="241" fill="#87d787">✓</text>
+<text x="28.6" y="241" fill="#d4d4d8"> lint</text>
+<text x="20.0" y="263" fill="#87d787">✓</text>
+<text x="28.6" y="263" fill="#d4d4d8"> unit</text>
+<text x="20.0" y="285" fill="#d4d4d8" font-weight="700">Reviews </text>
+<text x="88.8" y="285" fill="#d4d4d8">@luis </text>
+<text x="140.4" y="285" fill="#87d787">approved</text>
+<text x="209.2" y="285" fill="#d4d4d8"> · @marta </text>
+<text x="295.2" y="285" fill="#ff5f5f">requested changes</text>
+<text x="20.0" y="307" fill="#7c8190">────────────────────────────────────────────────────────────</text>
+<text x="20.0" y="329" fill="#d4d4d8" font-weight="700">Summary</text>
+<text x="20.0" y="351" fill="#d4d4d8">Adds the filing month to every row of the SII export.</text>
+<text x="20.0" y="373" fill="#d4d4d8"> • New </text>
+<text x="80.2" y="373" fill="#87d7ff">filing_month</text>
+<text x="183.4" y="373" fill="#d4d4d8"> column</text>
+<text x="20.0" y="395" fill="#d4d4d8"> • Backfills 2026 from the invoice dates</text>
+</svg>

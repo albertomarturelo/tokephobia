@@ -1,0 +1,14 @@
+{
+  "name": "tokephobia",
+  "description": "tokephobia: GitHub issues, pull requests, milestones and workflow runs inside Claude Code",
+  "owner": {
+    "name": "Alberto Marturelo Lorenzo"
+  },
+  "plugins": [
+    {
+      "name": "tokephobia",
+      "source": "./plugin",
+      "description": "GitHub line above the prompt and a pane with issues, pull requests, milestones, workflow runs and this session's PRs"
+    }
+  ]
+}

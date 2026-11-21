@@ -1,0 +1,39 @@
+{
+  "name": "tokephobia",
+  "version": "0.1.0",
+  "description": "Worktree-aware Claude Code status line and GitHub plugin: branch, context left, plan usage, and the repo's and session's issues and PRs.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "tokephobia": "./bin/tokephobia.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "statusline": "node bin/tokephobia.mjs",
+    "test": "node --test test/",
+    "typecheck": "tsc --noEmit",
+    "capture:show": "ls -la fixtures/captures",
+    "setup": "node bin/tokephobia.mjs install",
+    "test:plugin": "claude plugin test plugin"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  },
+  "license": "MIT",
+  "author": "Alberto Marturelo Lorenzo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/albertomarturelo/tokephobia.git"
+  },
+  "homepage": "https://github.com/albertomarturelo/tokephobia#readme",
+  "bugs": "https://github.com/albertomarturelo/tokephobia/issues",
+  "keywords": [
+    "claude-code",
+    "statusline",
+    "git-worktree",
+    "github"
+  ]
+}
