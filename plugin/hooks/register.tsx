@@ -245,6 +245,12 @@ async function readJson($: Dollar, path: string): Promise<any> {
  * The session's PRs come from tokephobia's status line, which scans this
  * session's transcript and caches what it finds (and each PR's state/CI).
  */
+/** Session PRs order everywhere: open first, then the ones the session created, then the newest. */
+export function bySessionOrder(a: SessionPr, b: SessionPr): number {
+  const isDone = (p: SessionPr) => p.state === 'MERGED' || p.state === 'CLOSED'
+  return Number(isDone(a)) - Number(isDone(b)) || Number(b.created) - Number(a.created) || b.number - a.number
+}
+
 async function loadSessionPrs($: Dollar): Promise<void> {
   if (!cacheDir) {
     const r = await $.process.run(['sh', '-c', 'printf %s "${TOKEPHOBIA_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/tokephobia}"'])
@@ -267,8 +273,7 @@ async function loadSessionPrs($: Dollar): Promise<void> {
       checks: status?.checks ?? null,
     })
   }
-  // Created PRs first, as the status line ordered them.
-  list.sort((a, b) => Number(b.created) - Number(a.created))
+  list.sort(bySessionOrder)
   const before = await read($, sessionPrs)
   if (JSON.stringify(before) !== JSON.stringify(list)) await update($, sessionPrs, () => list)
 }
@@ -626,11 +631,8 @@ export const register: Register = on => {
     const isPrOn = (p: SessionPr) => isPaneOpen && shown?.kind === 'pr' && shown.number === p.number && shown.repo === p.repo
 
     const failing = d.prs.filter(p => p.checks === 'fail').length
-    // Open PRs first, then the newest; the band stays one line however many the session has.
-    const isDone = (p: SessionPr) => p.state === 'MERGED' || p.state === 'CLOSED'
-    const onBand = [...mine]
-      .sort((a, b) => Number(isDone(a)) - Number(isDone(b)) || Number(b.created) - Number(a.created) || b.number - a.number)
-      .slice(0, BAND_PRS)
+    // Already in session order (open first); the band stays one line however many the session has.
+    const onBand = mine.slice(0, BAND_PRS)
     const hidden = mine.length - onBand.length
     const milestone =
       [...d.milestones].filter(m => m.dueOn).sort((a, b) => Date.parse(a.dueOn!) - Date.parse(b.dueOn!))[0] ??

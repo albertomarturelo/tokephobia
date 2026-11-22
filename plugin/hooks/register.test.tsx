@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { duration, groupWorkflows, logTail } from './register'
+import { bySessionOrder, duration, groupWorkflows, logTail } from './register'
 
 const REPO = 'acme/app'
 const ISSUES = [{ number: 7, title: 'Broken login', url: `https://github.com/${REPO}/issues/7`, labels: [], assignees: [], updatedAt: '2026-11-21T10:00:00Z' }]
@@ -205,4 +205,11 @@ test('a milestone shows its open and closed issues, and an issue opens from it a
   await ui.press({ key: 'back' })
   expect(await ui.find({ type: 'Text', text: /1 of 2 closed/ })).toBeTruthy()
   await ui.unmount()
+})
+
+test('session PRs are ordered open first, then created, then newest', () => {
+  const pr = (number: number, state: string | null, created = true) =>
+    ({ number, url: '', repo: REPO, created, state, isDraft: false, checks: null })
+  const sorted = [pr(1, 'OPEN'), pr(5, 'MERGED'), pr(3, 'OPEN', false), pr(4, 'OPEN'), pr(2, 'CLOSED')].sort(bySessionOrder)
+  expect(sorted.map(p => p.number)).toEqual([4, 1, 3, 5, 2])
 })
