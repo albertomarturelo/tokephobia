@@ -54,17 +54,29 @@ export function render(m: RenderModel): string {
     const paint = pct <= 20 ? red : pct <= 40 ? yellow : green;
     budget.push(`🧠 ${paint(`${bar(pct)} ${pct}% left`)}${c.fresh ? dim(" · new session") : ""}`);
   }
-  for (const l of m.limits ?? []) budget.push(renderLimit(l));
+  const limits = m.limits ?? [];
+  if (limits.length) {
+    const week = limits.find((l) => l.label === "week")?.resetsAt;
+    const parts = limits.map((l) =>
+      // A model's week usually resets with the overall week: say it once.
+      renderLimit(l, l.label !== "week" && l.label !== "5h" && sameMinute(l.resetsAt, week)),
+    );
+    budget.push(`📅 ${parts.join("   ")}`);
+  }
   if (budget.length) lines.push(budget.join("   "));
 
   return lines.join("\n") + "\n";
 }
 
-function renderLimit(l: LimitInfo): string {
+function renderLimit(l: LimitInfo, hideReset = false): string {
   const used = Math.round(l.usedPct);
   const paint = used >= 90 ? red : used >= 75 ? yellow : (s: string) => s;
-  const reset = l.resetsAt ? dim(` · reset ${formatReset(l.resetsAt)}`) : "";
-  return `📅 ${l.label} ${paint(`${used}%`)}${reset}`;
+  const reset = l.resetsAt && !hideReset ? dim(` · reset ${formatReset(l.resetsAt)}`) : "";
+  return `${l.label} ${paint(`${used}%`)}${reset}`;
+}
+
+function sameMinute(a?: number, b?: number): boolean {
+  return a !== undefined && b !== undefined && Math.abs(a - b) < 60_000;
 }
 
 const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];

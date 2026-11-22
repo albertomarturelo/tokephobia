@@ -59,7 +59,9 @@ Claude Code only tells a status line which folder a session was **launched** in.
 | `↑1 ↓2` | Commits ahead of and behind upstream. |
 | `🤖 Opus 5.5 · high ●●●○○` | Model and reasoning effort (`low` to `max`). `⚡fast` when fast mode is on. |
 | `🧠 73% left` | Context left: green above 40%, yellow up to 40%, red up to 20%. |
-| `📅 week 48% · reset Fri 03:00` | Plan usage and when it resets: yellow from 75%, red from 90%. |
+| `📅 5h 38% · reset in 2h   week 48% · reset Fri 03:00   Fable 41%` | Plan usage used in the 5-hour window, the week, and each model's week (Fable), with when each resets: yellow from 75%, red from 90%. A model's reset is left out when it matches the week's. |
+
+**Where plan usage comes from.** Claude Code only passes the status line the 5-hour and weekly windows, and only once a response has reported them. The per-model weeks are in claude.ai's usage report, the one `/usage` shows. On a claude.ai subscription, tokephobia fetches that report in the background every 3 minutes with Claude Code's own login (read from the macOS Keychain, or `~/.claude/.credentials.json` elsewhere), sends it only to `api.anthropic.com`, and keeps just the percentages and reset times in its cache. macOS may ask once whether `security` can read the `Claude Code-credentials` item: choose **Always Allow**. Set `TOKEPHOBIA_NO_USAGE=1` to turn it off and show only what Claude Code passes.
 
 ### GitHub above the prompt
 

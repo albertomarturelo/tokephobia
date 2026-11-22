@@ -11,6 +11,7 @@ import { readLimits } from "./limits.ts";
 import { withStatus } from "./prs.ts";
 import { render } from "./render.ts";
 import { scanTranscript, type TranscriptState } from "./transcript.ts";
+import { cachedUsageLimits, mergeLimits } from "./usage.ts";
 import { listWorktrees, pickActiveWorktree } from "./worktree.ts";
 
 function readSession(input: StatusLineInput): TranscriptState | undefined {
@@ -35,6 +36,8 @@ process.stdin.on("end", () => {
     // PRs are shown by the plugin's GitHub line (pressable), not here. Calling
     // withStatus still keeps their state/CI cache fresh, which the plugin reads.
     if (session) withStatus(session.prs);
+    // rate_limits only comes on a claude.ai subscription: only then is there a usage report to read.
+    const limits = input.rate_limits ? mergeLimits(readLimits(input), cachedUsageLimits()) : readLimits(input);
 
     process.stdout.write(
       render({
@@ -49,7 +52,7 @@ process.stdin.on("end", () => {
           : undefined,
         git: workDir ? readGitInfo(workDir) : undefined,
         context: readContext(input),
-        limits: readLimits(input),
+        limits,
       }),
     );
   } catch (err) {

@@ -19,3 +19,17 @@ test("model without effort info shows just the name", () => {
   const out = render({ model: { name: "Opus 5.5", thinking: false } });
   assert.match(out, /🤖 Opus 5\.5 \(no thinking\)/);
 });
+
+test("plan usage: one calendar, 5h first, a model's week drops the reset it shares", () => {
+  const now = Date.now();
+  const week = now + 3 * 86_400_000;
+  const out = render({
+    limits: [
+      { label: "5h", usedPct: 38, resetsAt: now + 2 * 3600_000 + 10_000 },
+      { label: "week", usedPct: 56, resetsAt: week },
+      { label: "Fable", usedPct: 91, resetsAt: week + 200 },
+    ],
+  });
+  assert.match(out, /^\n?📅 5h 38% · reset in 2h   week 56% · reset \S+ \d\d:\d\d   Fable 91%\n$/u);
+  assert.equal(out.match(/📅/g)?.length, 1);
+});
