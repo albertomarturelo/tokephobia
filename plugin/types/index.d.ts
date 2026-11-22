@@ -168,6 +168,26 @@ export type SessionPr = {
   checks: Checks | null
 }
 
+/** The repo's base branch in its main checkout, against the remote. */
+export type BaseView = {
+  /** The base branch: origin's default (origin/HEAD), else GitHub's. */
+  branch: string
+  /** The main checkout: the first entry of `git worktree list`. */
+  dir: string
+  /** `owner/repo` of origin, when it is on GitHub. */
+  repo: string | null
+  /** Commits the local base branch has that origin's hasn't, and the other way round. */
+  ahead: number
+  behind: number
+  /** Whether the main checkout has the base branch checked out. */
+  isCheckedOut: boolean
+  /** Tracked changes in the main checkout while it has the base branch out: a pull would be refused. */
+  isDirty: boolean
+  sync: 'idle' | 'syncing'
+  /** Why the last fetch failed; the counts are then from before it. */
+  error: string | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
     'tokephobia': {
@@ -185,6 +205,8 @@ declare module 'claude-code' {
       run: Shaped<RunView | null>
       /** Milestone the pane shows instead of the Milestones list; null shows the list. */
       milestone: Shaped<MilestoneView | null>
+      /** The base branch of the session's repo, shown first on the band; null outside a git repo. */
+      base: Shaped<BaseView | null>
     }
   }
 }

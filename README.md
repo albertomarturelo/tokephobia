@@ -64,13 +64,14 @@ Claude Code only tells a status line which folder a session was **launched** in.
 ### GitHub above the prompt
 
 ```
-GitHub · acme/app [ Issues 23 ] [ PRs 4 1✗ ] [ v2.3 62% ] · session [ #42 ⏳ ] [ #38 ✓ ]
+[ main ↓3 ⟳ ] · GitHub · acme/app [ Issues 23 ] [ PRs 4 1✗ ] [ v2.3 62% ] · session [ #42 ⏳ ] [ #38 ✓ ]
 ```
 
+- **Base branch:** where the main checkout's `main` (origin's default branch) stands against origin: `✓` up to date, `↓3` behind, `↑1` with local commits, `✎` uncommitted changes, `⚠` the last fetch failed. It fetches every 2 minutes, which only moves remote refs. Pressing it (or `s`) syncs, fast-forward only: `git pull --ff-only` when the main checkout has `main` out and is clean, `git fetch origin main:main` when it's on another branch. With uncommitted changes, or when `main` has diverged, it does nothing and says why. Merging a PR into `main` from the pane syncs it too. Hidden while `/gh owner/repo` shows another repo.
 - **Repo counts:** open issues, open PRs (and how many fail CI), and the nearest milestone's progress.
 - **Session PRs:** the PRs this session created or mentioned, with their state: `✓` CI passing, `✗` failing, `⏳` running, `merged`, `closed`. PRs it only mentioned are dimmed. Merged PRs are hidden by default: turn **Hide merged session PRs** off in `/config`, or press `h` in the Session tab, to see them.
 
-Press an entry with the mouse, or press `ctrl+x tab` and then `i`, `p` or `m`. A count opens a pane with only that list; pressing it again closes it.
+Press an entry with the mouse, or press `ctrl+x tab` and then `s`, `i`, `p` or `m`. A count opens a pane with only that list; pressing it again closes it.
 
 ![The pane on the Pull requests tab, listing open PRs with their CI and review state](docs/pane.svg)
 
