@@ -30,10 +30,11 @@ const LOG = [
 // Answers the plugin's `gh` calls the way the CLI would for a repo with one issue and nothing else.
 function ghAnswer(argv: readonly string[]): string {
   const cmd = argv.slice(1, 3).join(' ')
-  if (cmd === 'repo view') return JSON.stringify({ nameWithOwner: REPO })
+  if (cmd === 'repo view') return JSON.stringify({ nameWithOwner: REPO, squashMergeAllowed: true, mergeCommitAllowed: false, rebaseMergeAllowed: true, viewerPermission: 'ADMIN' })
+  if (cmd === 'pr merge') return ''
   if (cmd === 'issue list') return JSON.stringify(ISSUES)
   if (cmd === 'pr list') return JSON.stringify([PR])
-  if (cmd === 'pr view') return JSON.stringify({ ...PR, body: 'Adds the month.', state: 'OPEN', statusCheckRollup: ROLLUP, reviews: [] })
+  if (cmd === 'pr view') return JSON.stringify({ ...PR, body: 'Adds the month.', state: 'OPEN', baseRefName: 'main', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', statusCheckRollup: ROLLUP, reviews: [] })
   if (cmd === 'run view' && argv.includes('--log-failed')) return LOG
   if (cmd === 'run view') return JSON.stringify(RUN)
   if (cmd === 'run rerun') return ''
@@ -212,4 +213,31 @@ test('session PRs are ordered open first, then created, then newest', () => {
     ({ number, url: '', repo: REPO, created, state, isDraft: false, checks: null })
   const sorted = [pr(1, 'OPEN'), pr(5, 'MERGED'), pr(3, 'OPEN', false), pr(4, 'OPEN'), pr(2, 'CLOSED')].sort(bySessionOrder)
   expect(sorted.map(p => p.number)).toEqual([4, 1, 3, 5, 2])
+})
+
+test('merging a PR from the pane asks for an allowed method first, then calls gh pr merge', async ($, on) => {
+  await start($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-prs' })
+  await ui.press({ key: 'pr-42' })
+  await ui.press({ key: 'merge' })
+  expect(ran.some(a => a[1] === 'pr' && a[2] === 'merge')).toBe(false)
+  expect(await ui.find({ type: 'Text', text: /Merge #42 into main\?/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Button', key: 'merge-merge' })).toBeFalsy()
+  await ui.press({ key: 'merge-squash' })
+  expect(ran).toContainEqual(['gh', 'pr', 'merge', '42', '--repo', 'acme/app', '--squash'])
+  await ui.unmount()
+})
+
+test('an admin can turn on the bypass, which merges with --admin', async ($, on) => {
+  await start($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-prs' })
+  await ui.press({ key: 'pr-42' })
+  await ui.press({ key: 'merge' })
+  await ui.press({ key: 'merge-bypass' })
+  expect(await ui.find({ type: 'Text', text: /will be bypassed/ })).toBeTruthy()
+  await ui.press({ key: 'merge-rebase' })
+  expect(ran).toContainEqual(['gh', 'pr', 'merge', '42', '--repo', 'acme/app', '--rebase', '--admin'])
+  await ui.unmount()
 })

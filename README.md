@@ -90,6 +90,8 @@ Press an issue or PR, from a list or from the session PRs, to read it in the pan
 
 `← back` (`b`) returns to the tabs, **Open on GitHub** (`o`) opens it in the browser, and **↻ Refresh** (`r`) reloads it. A PR with checks still running refreshes by itself every 20 seconds.
 
+**⇥ Merge** (`m`) merges an open PR from the pane. It first asks which method to use, offering only those the repo allows: squash (`s`), merge commit (`c`) or rebase (`e`). Drafts and PRs with conflicts say why they can't be merged instead. If you're an admin of the repo, the question also offers **Merge as admin** (`a`), which merges with `gh pr merge --admin`, bypassing required reviews and checks. It starts off.
+
 ### Milestones
 
 Press a milestone in the Milestones tab to see its progress, due date (in red once it's overdue), description and issues: open ones first, then the latest closed. Press an issue to read it; `← back` returns to the milestone.

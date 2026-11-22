@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Hook, Register, RenderChildren } from 'claude-code'
 
-import type { CheckResult, CheckRow, Checks, Detail, Issue, Milestone, MilestoneIssue, MilestoneView, Pr, ReviewRow, RunJob, RunView, SessionPr, Snapshot, Tab } from '../types'
+import type { CheckResult, CheckRow, Checks, Detail, Issue, MergeMethod, Milestone, MilestoneIssue, MilestoneView, Pr, ReviewRow, RunJob, RunView, SessionPr, Snapshot, Tab } from '../types'
 
 /** The `$` every hook receives. */
 type Dollar = Parameters<Hook<'session.start'>>[0]
@@ -29,7 +29,7 @@ const EMPTY: Snapshot = {
 const tab = atom({ plugin: 'tokephobia', key: 'tab' } as const, 'prs' as Tab, { shape: 'tab-2' })
 const data = atom({ plugin: 'tokephobia', key: 'data' } as const, EMPTY, { shape: 'data-2' })
 const solo = atom({ plugin: 'tokephobia', key: 'solo' } as const, null as Tab | null, { shape: 'solo-2' })
-const detail = atom({ plugin: 'tokephobia', key: 'detail' } as const, null as Detail | null, { shape: 'detail-4' })
+const detail = atom({ plugin: 'tokephobia', key: 'detail' } as const, null as Detail | null, { shape: 'detail-5' })
 const sessionPrs = atom({ plugin: 'tokephobia', key: 'sessionPrs' } as const, [] as SessionPr[], { shape: 'session-prs-1' })
 const run = atom({ plugin: 'tokephobia', key: 'run' } as const, null as RunView | null, { shape: 'run-1' })
 const shownMilestone = atom({ plugin: 'tokephobia', key: 'milestone' } as const, null as MilestoneView | null, { shape: 'milestone-1' })
@@ -283,6 +283,7 @@ function emptyDetail(kind: Detail['kind'], repo: string, number: number, title: 
     kind, repo, number, title, url, body: '', state: '', author: '', labels: [], assignees: [], createdAt: '',
     comments: 0, isDraft: false, branch: '', base: '', review: '', checks: [], reviews: [],
     additions: 0, deletions: 0, files: 0, mergedAt: null, mergedBy: '', closedAt: null, mergeable: '', mergeState: '',
+    merge: 'idle', mergeMethods: [], canBypass: false, bypass: false,
     isLoading: true, isRefreshing: false, error: null,
   }
 }
@@ -418,6 +419,46 @@ async function loadMilestone($: Dollar): Promise<void> {
 async function openUrl($: Dollar, url: string): Promise<void> {
   const r = await $.process.run(['sh', '-c', 'if command -v open >/dev/null 2>&1; then open "$1"; else xdg-open "$1"; fi', 'sh', url], { timeoutMs: 15_000 })
   if (r.exitCode !== 0) await $.ui.toast(`Couldn't open ${url}`)
+}
+
+const MERGE_METHODS: { id: MergeMethod; flag: string; label: string; hotkey: string; allowed: string }[] = [
+  { id: 'squash', flag: '--squash', label: 'Squash and merge', hotkey: 's', allowed: 'squashMergeAllowed' },
+  { id: 'merge', flag: '--merge', label: 'Merge commit', hotkey: 'c', allowed: 'mergeCommitAllowed' },
+  { id: 'rebase', flag: '--rebase', label: 'Rebase and merge', hotkey: 'e', allowed: 'rebaseMergeAllowed' },
+]
+
+/** First press of Merge: asks which method, offering only those the repo allows. */
+async function askMerge($: Dollar): Promise<void> {
+  const d = await read($, detail)
+  if (d?.kind !== 'pr' || d.merge !== 'idle') return
+  await update($, detail, x => (x ? { ...x, merge: 'confirm' as const, bypass: false } : x))
+  try {
+    const repo = await gh($, ['repo', 'view', d.repo, '--json', 'squashMergeAllowed,mergeCommitAllowed,rebaseMergeAllowed,viewerPermission'])
+    const methods = MERGE_METHODS.filter(m => repo[m.allowed] !== false).map(m => m.id)
+    const canBypass = String(repo.viewerPermission ?? '').toUpperCase() === 'ADMIN'
+    await update($, detail, x => (x?.number === d.number ? { ...x, mergeMethods: methods, canBypass } : x))
+  } catch {
+    await update($, detail, x => (x?.number === d.number ? { ...x, mergeMethods: MERGE_METHODS.map(m => m.id) } : x))
+  }
+}
+
+/** `gh pr merge` with the method the person picked; then shows the PR as merged. */
+async function mergePr($: Dollar, method: MergeMethod): Promise<void> {
+  const d = await read($, detail)
+  if (d?.kind !== 'pr' || d.merge !== 'confirm') return
+  await update($, detail, x => (x ? { ...x, merge: 'sending' as const } : x))
+  const flag = MERGE_METHODS.find(m => m.id === method)!.flag
+  const argv = ['gh', 'pr', 'merge', String(d.number), '--repo', d.repo, flag, ...(d.canBypass && d.bypass ? ['--admin'] : [])]
+  const r = await $.process.run(argv, { cwd, timeoutMs: 60_000 })
+  if (r.exitCode !== 0) {
+    await update($, detail, x => (x ? { ...x, merge: 'confirm' as const } : x))
+    const why = (r.stderr || r.stdout).trim().split('\n')[0] || `gh exited with ${r.exitCode}`
+    await $.ui.toast(`Couldn't merge #${d.number}: ${why}${d.canBypass && !d.bypass ? ' (as an admin you can turn on the bypass)' : ''}`)
+    return
+  }
+  await $.ui.toast(`Merged #${d.number} into ${d.base || 'the base branch'}`)
+  await openPr($, d.repo, d, true)
+  void refresh($)
 }
 
 /** A refresh that fails keeps what is shown and says why. */
@@ -759,6 +800,8 @@ export const register: Register = on => {
       const reviewWord = (s: string) =>
         s === 'APPROVED' ? <Text color="green">approved</Text> : s === 'CHANGES_REQUESTED' ? <Text color="red">requested changes</Text> : <Text dimColor>{s.toLowerCase().replace('_', ' ')}</Text>
       const isPr = shown.kind === 'pr'
+      const isOpenPr = isPr && !shown.isLoading && shown.state === 'OPEN'
+      const canMerge = isOpenPr && !shown.isDraft && shown.mergeable !== 'CONFLICTING' && shown.mergeState !== 'DIRTY'
       const MERGE_STATE: Record<string, [string, string]> = {
         CLEAN: ['green', 'ready to merge'],
         HAS_HOOKS: ['green', 'ready to merge'],
@@ -802,11 +845,41 @@ export const register: Register = on => {
             <Button key="back" hotkey="b" onPress={async () => { await update($, detail, () => null); await update($, solo, () => null) }} label="← back" />
             <Button key="open-web" hotkey="o" onPress={() => openOnGitHub($, shown)} label="↗ Open on GitHub" />
             <Button key="refresh-detail" hotkey="r" onPress={() => refreshDetail($)} label={shown.isRefreshing ? '↻ Refreshing…' : '↻ Refresh'} />
+            {canMerge && shown.merge === 'idle' ? <Button key="merge" hotkey="m" onPress={() => askMerge($)} label="⇥ Merge" /> : null}
           </Box>
           <Text bold wrap="wrap">
             <Text color="green">#{shown.number}</Text> {shown.title}
           </Text>
           {badge}
+          {isOpenPr && !canMerge ? (
+            <Text dimColor wrap="truncate-end">
+              {shown.isDraft ? "Can't merge a draft: mark it ready for review first." : 'Resolve the conflicts before merging.'}
+            </Text>
+          ) : null}
+          {canMerge && shown.merge === 'confirm' ? (
+            <Box flexDirection="column">
+              <Text color="yellow" wrap="wrap">
+                Merge #{shown.number} into {shown.base || 'the base branch'}? This changes {shown.base || 'it'} on GitHub.
+                {shown.bypass ? ' Required reviews and checks will be bypassed.' : ''}
+              </Text>
+              {shown.canBypass ? (
+                <Box flexDirection="row" gap={1}>
+                  <Button key="merge-bypass" hotkey="a" onPress={() => update($, detail, x => (x ? { ...x, bypass: !x.bypass } : x))}
+                    label={`${shown.bypass ? '☑' : '☐'} Merge as admin, bypassing the rules`} />
+                  {shown.mergeState === 'BLOCKED' && !shown.bypass ? <Text dimColor>blocked: this lets you merge anyway</Text> : null}
+                </Box>
+              ) : null}
+              {shown.mergeMethods.length ? (
+                <Box flexDirection="row" gap={2}>
+                  {MERGE_METHODS.filter(m => shown.mergeMethods.includes(m.id)).map(m => (
+                    <Button key={`merge-${m.id}`} hotkey={m.hotkey} onPress={() => mergePr($, m.id)} label={m.label} />
+                  ))}
+                  <Button key="merge-cancel" hotkey="n" onPress={() => update($, detail, x => (x ? { ...x, merge: 'idle' as const } : x))} label="Cancel" />
+                </Box>
+              ) : <Text dimColor>Checking the repo's merge methods…</Text>}
+            </Box>
+          ) : null}
+          {shown.merge === 'sending' ? <Text dimColor>Merging…</Text> : null}
           <Text dimColor wrap="truncate-end">
             {isPr ? '' : state}{shown.author ? `${isPr ? '' : ' · '}@${shown.author}` : ''}{shown.createdAt ? ` · ${ago(shown.createdAt, now)}` : ''}
             {shown.comments ? ` · ${shown.comments} comment${shown.comments === 1 ? '' : 's'}` : ''}
