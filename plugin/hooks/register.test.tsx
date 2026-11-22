@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bySessionOrder, duration, groupWorkflows, logTail } from './register'
+import { bySessionOrder, duration, groupWorkflows, logTail, parseAheadBehind, repoFromRemote } from './register'
 
 const REPO = 'acme/app'
 const ISSUES = [{ number: 7, title: 'Broken login', url: `https://github.com/${REPO}/issues/7`, labels: [], assignees: [], updatedAt: '2026-11-21T10:00:00Z' }]
@@ -43,6 +43,29 @@ function ghAnswer(argv: readonly string[]): string {
 }
 
 const ran: string[][] = []
+const toasts: string[] = []
+
+// A fake main checkout for the plugin's `git -C <dir> …` calls; null is no repo at all.
+type FakeRepo = { head: string; ahead: number; behind: number; dirty: boolean; pullFails?: string }
+let repo: FakeRepo | null = null
+function gitRun(args: readonly string[]): { exitCode: number; stdout: string; stderr: string } {
+  const ok = (stdout = '') => ({ exitCode: 0, stdout, stderr: '' })
+  const fail = (stderr: string) => ({ exitCode: 1, stdout: '', stderr })
+  if (!repo) return fail('fatal: not a git repository')
+  const cmd = args.join(' ')
+  if (cmd === 'worktree list --porcelain') return ok('worktree /src/app\nHEAD abc\nbranch refs/heads/main\n\nworktree /src/app-feat\n')
+  if (cmd === 'symbolic-ref --short refs/remotes/origin/HEAD') return ok('origin/main')
+  if (cmd === 'symbolic-ref --short -q HEAD') return ok(repo.head)
+  if (cmd.startsWith('rev-list')) return ok(`${repo.ahead}\t${repo.behind}`)
+  if (cmd.startsWith('status')) return ok(repo.dirty ? ' M src/a.ts' : '')
+  if (cmd === 'remote get-url origin') return ok(`git@github.com:${REPO}.git`)
+  if (cmd.startsWith('fetch') || cmd.startsWith('pull')) {
+    if (repo.pullFails && (cmd.startsWith('pull') || cmd.includes(':'))) return fail(repo.pullFails)
+    if (cmd.startsWith('pull') || cmd.includes('main:main')) repo.behind = 0
+    return ok()
+  }
+  return ok()
+}
 
 async function start($: any, on: any, cache: (path: string) => string = () => '', answer: (argv: readonly string[]) => string | undefined = () => undefined) {
   on('command.register', () => ({ value: { command: 'gh' } }))
@@ -51,11 +74,13 @@ async function start($: any, on: any, cache: (path: string) => string = () => ''
   on('fs.read', (_: unknown, e: { path: string }) => ({ value: cache(e.path) })) // status line cache; none by default
   on('clock.now', () => ({ value: Date.parse('2026-11-21T12:00:00Z') }))
   on('clock.every', () => ({ value: undefined }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_: unknown, e: { text: string }) => (toasts.push(e.text), { value: undefined }))
   on('process.run', (_: unknown, e: { argv: readonly string[] }) => (ran.push([...e.argv]), {
     value: e.argv[0] === 'gh'
       ? { exitCode: 0, stdout: answer(e.argv) ?? ghAnswer(e.argv), stderr: '' }
-      : { exitCode: 0, stdout: '/tmp/tokephobia-cache', stderr: '' },
+      : e.argv[0] === 'git'
+        ? gitRun(e.argv.slice(3))
+        : { exitCode: 0, stdout: '/tmp/tokephobia-cache', stderr: '' },
   }))
   on('session.start', (_: unknown, e: { cwd: string }) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -196,14 +221,77 @@ test('with hideMergedSessionPrs off, merged session PRs stay on the band', { opt
 test('the Session tab flips hideMergedSessionPrs through /config', async ($, on) => {
   const set: unknown[] = []
   // Stands in for the settings writer beneath the plugins.
-  on('config.set', { key: 'tokephobia.hideMergedSessionPrs' }, (_: unknown, e: { key: string; value: unknown }) => (set.push([e.key, e.value]), { value: e.value }))
-  on('config.list', () => ({ value: [{ key: 'tokephobia.hideMergedSessionPrs', label: 'Hide merged session PRs', kind: 'toggle', value: true, provider: { plugin: 'tokephobia', tier: 'user' }, isLocked: false }] }))
+  on('config.set', { key: 'tokephobia.hideMergedSessionPrs' }, (_: unknown, e) => (set.push([e.key, e.value]), { value: e.value }))
+  // The answer to $.config.list(), which the hook's own type doesn't describe.
+  on('config.list', (): any => ({ value: [{ key: 'tokephobia.hideMergedSessionPrs', label: 'Hide merged session PRs', kind: 'toggle', value: true, provider: { plugin: 'tokephobia', tier: 'user' }, isLocked: false }] }))
   await start($, on)
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   await ui.press({ key: 'tab-session' })
   expect(await ui.find({ type: 'Text', text: /Merged PRs hidden/ })).toBeTruthy()
   await ui.press({ key: 'toggle-merged' })
   expect(set).toEqual([['tokephobia.hideMergedSessionPrs', false]])
+  await ui.unmount()
+})
+
+test('helpers: GitHub remotes and ahead/behind counts', () => {
+  expect(repoFromRemote('git@github.com:acme/app.git')).toBe('acme/app')
+  expect(repoFromRemote('https://github.com/acme/app')).toBe('acme/app')
+  expect(repoFromRemote('https://gitlab.com/acme/app.git')).toBeNull()
+  expect(parseAheadBehind('1\t3')).toEqual([1, 3])
+})
+
+async function startWithRepo($: any, on: any, fake: FakeRepo) {
+  ran.length = 0
+  toasts.length = 0
+  repo = fake
+  await start($, on)
+  return $.ui.mount({ ...BAND, surface: 'terminal' })
+}
+
+test('the band starts with the base branch, and pressing it pulls the main checkout', async ($, on) => {
+  const ui = await startWithRepo($, on, { head: 'main', ahead: 0, behind: 3, dirty: false })
+  expect(await ui.find({ type: 'Text', text: /^main$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /↓3/ })).toBeTruthy()
+  await ui.press({ key: 'band-base' })
+  expect(ran).toContainEqual(['git', '-C', '/src/app', 'pull', '--ff-only', '--quiet', 'origin', 'main'])
+  expect(toasts).toContain('Synced main: 3 new commits')
+  expect(await ui.find({ type: 'Text', text: /↓/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /✓/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('with another branch out, syncing fast-forwards main without switching', async ($, on) => {
+  const ui = await startWithRepo($, on, { head: 'feat/x', ahead: 0, behind: 2, dirty: true })
+  await ui.press({ key: 'band-base' })
+  expect(ran).toContainEqual(['git', '-C', '/src/app', 'fetch', '--quiet', 'origin', 'main:main'])
+  expect(ran.some(a => a[0] === 'git' && a[3] === 'pull')).toBe(false)
+  await ui.unmount()
+})
+
+test('a main checkout with uncommitted changes is never pulled', async ($, on) => {
+  const ui = await startWithRepo($, on, { head: 'main', ahead: 0, behind: 1, dirty: true })
+  expect(await ui.find({ type: 'Text', text: /✎/ })).toBeTruthy()
+  await ui.press({ key: 'band-base' })
+  expect(ran.some(a => a[0] === 'git' && a[3] === 'pull')).toBe(false)
+  expect(toasts.join('\n')).toMatch(/uncommitted changes/)
+  await ui.unmount()
+})
+
+test('a diverged main is left alone and says why', async ($, on) => {
+  const ui = await startWithRepo($, on, { head: 'main', ahead: 1, behind: 2, dirty: false, pullFails: 'fatal: Not possible to fast-forward, aborting.' })
+  expect(await ui.find({ type: 'Text', text: /↑1/ })).toBeTruthy()
+  await ui.press({ key: 'band-base' })
+  expect(toasts).toContain("Couldn't sync main: it has 1 local commit origin doesn't")
+  await ui.unmount()
+})
+
+test('outside a git repo there is no base branch on the band', async ($, on) => {
+  ran.length = 0
+  repo = null
+  await start($, on)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^main$/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /GitHub · acme\/app/ })).toBeTruthy()
   await ui.unmount()
 })
 
@@ -253,6 +341,26 @@ test('merging a PR from the pane asks for an allowed method first, then calls gh
   await ui.press({ key: 'merge-squash' })
   expect(ran).toContainEqual(['gh', 'pr', 'merge', '42', '--repo', 'acme/app', '--squash'])
   await ui.unmount()
+})
+
+test('merging a PR into main pulls the main checkout afterwards', async ($, on) => {
+  ran.length = 0
+  toasts.length = 0
+  repo = { head: 'main', ahead: 0, behind: 0, dirty: false }
+  await start($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-prs' })
+  await ui.press({ key: 'pr-42' })
+  await ui.press({ key: 'merge' })
+  repo.behind = 1 // the merge commit lands on origin/main
+  await ui.press({ key: 'merge-squash' })
+  const merged = ran.findIndex(a => a[1] === 'pr' && a[2] === 'merge')
+  const pulled = ran.findIndex(a => a[0] === 'git' && a[3] === 'pull')
+  expect(merged).toBeGreaterThan(-1)
+  expect(pulled).toBeGreaterThan(merged)
+  expect(toasts).toContain('Synced main: 1 new commit')
+  await ui.unmount()
+  repo = null
 })
 
 test('an admin can turn on the bypass, which merges with --admin', async ($, on) => {

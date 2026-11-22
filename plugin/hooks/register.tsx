@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { Hook, Register, RenderChildren } from 'claude-code'
 
-import type { CheckResult, CheckRow, Checks, Detail, Issue, MergeMethod, Milestone, MilestoneIssue, MilestoneView, Pr, ReviewRow, RunJob, RunView, SessionPr, Snapshot, Tab } from '../types'
+import type { BaseView, CheckResult, CheckRow, Checks, Detail, Issue, MergeMethod, Milestone, MilestoneIssue, MilestoneView, Pr, ReviewRow, RunJob, RunView, SessionPr, Snapshot, Tab } from '../types'
 
 /** The `$` every hook receives. */
 type Dollar = Parameters<Hook<'session.start'>>[0]
@@ -33,6 +33,7 @@ const detail = atom({ plugin: 'tokephobia', key: 'detail' } as const, null as De
 const sessionPrs = atom({ plugin: 'tokephobia', key: 'sessionPrs' } as const, [] as SessionPr[], { shape: 'session-prs-1' })
 const run = atom({ plugin: 'tokephobia', key: 'run' } as const, null as RunView | null, { shape: 'run-1' })
 const shownMilestone = atom({ plugin: 'tokephobia', key: 'milestone' } as const, null as MilestoneView | null, { shape: 'milestone-1' })
+const base = atom({ plugin: 'tokephobia', key: 'base' } as const, null as BaseView | null, { shape: 'base-1' })
 const repoChoice = atom({ plugin: 'tokephobia', key: 'repo' } as const, null as string | null, { shape: 'repo-1' })
 
 const TABS: { id: Tab; label: string; hotkey: string }[] = [
@@ -170,6 +171,7 @@ let cacheDir: string | undefined
 let isRefreshing = false
 let isPaneOpen = false
 let liveTick = 0
+let isBaseLoading = false
 /** The `hideMergedSessionPrs` option; a change to it reloads the plugin, so `register` sets it again. */
 let hideMerged = true
 
@@ -232,6 +234,105 @@ async function refresh($: Dollar): Promise<void> {
   } finally {
     isRefreshing = false
   }
+}
+
+/** `git -C dir …`: whether it worked, its output, and the first line of why not. */
+async function git($: Dollar, dir: string, args: string[], timeoutMs = 10_000): Promise<{ ok: boolean; out: string; why: string }> {
+  const r = await $.process.run(['git', '-C', dir, ...args], { timeoutMs })
+  return { ok: r.exitCode === 0, out: r.stdout.trim(), why: (r.stderr || r.stdout).trim().split('\n')[0] || `git exited with ${r.exitCode}` }
+}
+
+/** `owner/repo` of a GitHub remote URL (https or ssh); null for anything else. */
+export function repoFromRemote(url: string): string | null {
+  return /github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/.exec(url.trim())?.[1] ?? null
+}
+
+/** `git rev-list --left-right --count a...b` → [ahead, behind]. */
+export function parseAheadBehind(out: string): [number, number] {
+  const [a, b] = out.trim().split(/\s+/).map(Number)
+  return [a || 0, b || 0]
+}
+
+/**
+ * Reads where the base branch stands in the main checkout; with `fetch`, asks
+ * origin first. A fetch only moves remote refs, so no worktree changes.
+ */
+async function loadBase($: Dollar, fetch: boolean): Promise<void> {
+  if (isBaseLoading || !cwd) return
+  isBaseLoading = true
+  try {
+    const list = await git($, cwd, ['worktree', 'list', '--porcelain'])
+    const dir = list.ok ? list.out.split('\n').find(l => l.startsWith('worktree '))?.slice('worktree '.length) : undefined
+    if (!dir) {
+      await update($, base, () => null)
+      return
+    }
+    const before = await read($, base)
+    let branch = before?.dir === dir ? before.branch : ''
+    if (!branch) {
+      const head = await git($, dir, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'])
+      branch = head.ok ? head.out.replace(/^origin\//, '') : ''
+    }
+    if (!branch) {
+      const r = await $.process.run(['gh', 'repo', 'view', '--json', 'defaultBranchRef', '-q', '.defaultBranchRef.name'], { cwd: dir, timeoutMs: 20_000 })
+      branch = r.exitCode === 0 ? r.stdout.trim() : ''
+    }
+    if (!branch) branch = 'main'
+    const fetched = fetch ? await git($, dir, ['fetch', '--quiet', 'origin', branch], 30_000) : undefined
+    const [counts, head, status, remote] = await Promise.all([
+      git($, dir, ['rev-list', '--left-right', '--count', `${branch}...origin/${branch}`]),
+      git($, dir, ['symbolic-ref', '--short', '-q', 'HEAD']),
+      git($, dir, ['status', '--porcelain', '--untracked-files=no']),
+      git($, dir, ['remote', 'get-url', 'origin']),
+    ])
+    const [ahead, behind] = counts.ok ? parseAheadBehind(counts.out) : [0, 0]
+    const isCheckedOut = head.ok && head.out === branch
+    const next: BaseView = {
+      branch, dir, ahead, behind, isCheckedOut,
+      repo: remote.ok ? repoFromRemote(remote.out) : null,
+      isDirty: isCheckedOut && status.ok && status.out !== '',
+      sync: before?.dir === dir ? before.sync : 'idle',
+      error: fetched && !fetched.ok ? fetched.why : fetched ? null : before?.error ?? null,
+    }
+    if (JSON.stringify(before) !== JSON.stringify(next)) await update($, base, () => next)
+  } finally {
+    isBaseLoading = false
+  }
+}
+
+/**
+ * Brings the base branch up to origin's, fast-forward only: `git pull --ff-only`
+ * when the main checkout has it out (and is clean), else `git fetch origin b:b`.
+ * Never merges, rebases or resets; says why when it can't.
+ */
+async function syncBase($: Dollar): Promise<void> {
+  const b = await read($, base)
+  if (!b || b.sync === 'syncing') return
+  if (b.isDirty) {
+    await $.ui.toast(`Not syncing ${b.branch}: ${b.dir} has uncommitted changes`)
+    return
+  }
+  await update($, base, x => (x ? { ...x, sync: 'syncing' as const } : x))
+  const r = b.isCheckedOut
+    ? await git($, b.dir, ['pull', '--ff-only', '--quiet', 'origin', b.branch], 60_000)
+    : await git($, b.dir, ['fetch', '--quiet', 'origin', `${b.branch}:${b.branch}`], 60_000)
+  await update($, base, x => (x ? { ...x, sync: 'idle' as const } : x))
+  await loadBase($, false)
+  const after = await read($, base)
+  if (!r.ok) {
+    const diverged = after && after.ahead && after.behind
+    await $.ui.toast(`Couldn't sync ${b.branch}: ${diverged ? `it has ${after.ahead} local commit${after.ahead === 1 ? '' : 's'} origin doesn't` : r.why}`)
+    return
+  }
+  const gained = b.behind - (after?.behind ?? 0)
+  await $.ui.toast(gained > 0 ? `Synced ${b.branch}: ${gained} new commit${gained === 1 ? '' : 's'}` : `${b.branch} is up to date`)
+}
+
+/** The base branch's chip, when it belongs to the repo the band shows. */
+async function shownBase($: Dollar): Promise<BaseView | null> {
+  const b = await read($, base)
+  const choice = await read($, repoChoice)
+  return b && (!choice || !b.repo || choice.toLowerCase() === b.repo.toLowerCase()) ? b : null
 }
 
 async function readJson($: Dollar, path: string): Promise<any> {
@@ -474,6 +575,12 @@ async function mergePr($: Dollar, method: MergeMethod): Promise<void> {
   await $.ui.toast(`Merged #${d.number} into ${d.base || 'the base branch'}`)
   await openPr($, d.repo, d, true)
   void refresh($)
+  // The merge landed on origin's base branch: bring the main checkout's along.
+  const b = await read($, base)
+  if (b && b.branch === d.base && (!b.repo || b.repo.toLowerCase() === d.repo.toLowerCase())) {
+    await loadBase($, true)
+    await syncBase($)
+  }
 }
 
 /** A refresh that fails keeps what is shown and says why. */
@@ -619,8 +726,12 @@ export const register: Register = (on, options) => {
     })
     void refresh($)
     void loadSessionPrs($)
+    void loadBase($, true)
     $.clock.every(REFRESH_MS, () => refresh($))
+    $.clock.every(REFRESH_MS, () => loadBase($, true))
     $.clock.every(SESSION_PRS_MS, () => loadSessionPrs($))
+    // Local only: catches a pull made by hand without asking origin.
+    $.clock.every(SESSION_PRS_MS, () => loadBase($, false))
     $.clock.every(LIVE_MS, () => liveRefresh($))
     return next(e)
   })
@@ -658,7 +769,8 @@ export const register: Register = (on, options) => {
     if (e.props.hasSurvey) return next(e)
     const d = await read($, data)
     const mine = await read($, sessionPrs)
-    if (!d.repo && !d.error && !mine.length) return next(e)
+    const b = await shownBase($)
+    if (!d.repo && !d.error && !mine.length && !b) return next(e)
     const { Box, Text, Button } = $.ui.resolve(e)
 
     const current = await read($, solo)
@@ -705,8 +817,26 @@ export const register: Register = (on, options) => {
       return p.isDraft ? <Text dimColor> draft</Text> : ''
     }
 
+    // main ✓ up to date · ↓3 behind (press to sync) · ↑1 ahead · ✎ uncommitted changes · ⚠ fetch failed.
+    const baseMark = (x: BaseView) => {
+      if (x.sync === 'syncing') return <Text color="yellow"> ⟳ syncing…</Text>
+      const marks: RenderChildren[] = []
+      if (x.behind) marks.push(<Text key="behind" color="yellow"> ↓{x.behind} ⟳</Text>)
+      if (x.ahead) marks.push(<Text key="ahead" color="cyan"> ↑{x.ahead}</Text>)
+      if (x.isDirty) marks.push(<Text key="dirty" color="yellow"> ✎</Text>)
+      if (x.error) marks.push(<Text key="error" color="red"> ⚠</Text>)
+      return marks.length ? marks : <Text color="green"> ✓</Text>
+    }
+
     return (
       <Box flexDirection="row" gap={1}>
+        {b ? (
+          <Button key="band-base" hotkey="s" onPress={() => syncBase($)}>
+            <Text bold>{b.branch}</Text>
+            {baseMark(b)}
+          </Button>
+        ) : null}
+        {b && (d.repo || d.error || mine.length) ? <Text dimColor>·</Text> : null}
         {d.error ? <Text color="red" wrap="truncate-end">GitHub ⚠ {d.error}</Text> : null}
         {!d.error && d.repo ? <Text dimColor wrap="truncate-end">GitHub · {d.repo}</Text> : null}
         {!d.error && d.repo ? (
