@@ -170,6 +170,8 @@ let cacheDir: string | undefined
 let isRefreshing = false
 let isPaneOpen = false
 let liveTick = 0
+/** The `hideMergedSessionPrs` option; a change to it reloads the plugin, so `register` sets it again. */
+let hideMerged = true
 
 async function gh($: Dollar, args: string[]): Promise<any> {
   const r = await $.process.run(['gh', ...args], { cwd, timeoutMs: 20_000 })
@@ -241,14 +243,26 @@ async function readJson($: Dollar, path: string): Promise<any> {
   }
 }
 
-/**
- * The session's PRs come from tokephobia's status line, which scans this
- * session's transcript and caches what it finds (and each PR's state/CI).
- */
 /** Session PRs order everywhere: open first, then the ones the session created, then the newest. */
 export function bySessionOrder(a: SessionPr, b: SessionPr): number {
   const isDone = (p: SessionPr) => p.state === 'MERGED' || p.state === 'CLOSED'
   return Number(isDone(a)) - Number(isDone(b)) || Number(b.created) - Number(a.created) || b.number - a.number
+}
+
+/**
+ * The session's PRs come from tokephobia's status line, which scans this
+ * session's transcript and caches what it finds (and each PR's state/CI).
+ * With `hideMergedSessionPrs` on, merged PRs drop out of the band and the Session tab.
+ */
+/** The option's `/config` key: `<plugin>.<field>`, the plugin named however it was installed. */
+const HIDE_MERGED_FIELD = 'hideMergedSessionPrs'
+
+/** Flips `hideMergedSessionPrs` as `/config` would; the plugin reloads with the new value. */
+async function toggleHideMerged($: Dollar): Promise<void> {
+  const row = (await $.config.list()).find(r => r.key.endsWith(`.${HIDE_MERGED_FIELD}`))
+  if (!row) return
+  const r = await $.config.set({ key: row.key, value: !hideMerged })
+  if (r.deny) await $.ui.toast(`Couldn't change it: ${r.deny}`)
 }
 
 async function loadSessionPrs($: Dollar): Promise<void> {
@@ -263,6 +277,7 @@ async function loadSessionPrs($: Dollar): Promise<void> {
   const list: SessionPr[] = []
   for (const p of prs) {
     const status = await readJson($, `${cacheDir}/prs/${safeKey(p.repo)}__${p.number}.json`)
+    if (hideMerged && status?.state === 'MERGED') continue
     list.push({
       number: p.number,
       url: p.url,
@@ -594,7 +609,8 @@ async function openOnGitHub($: Dollar, item: Detail): Promise<void> {
   if (r.exitCode !== 0) await $.ui.toast(`Couldn't open #${item.number}: ${(r.stderr || r.stdout).trim().split('\n')[0] || `gh exited with ${r.exitCode}`}`)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  hideMerged = options[HIDE_MERGED_FIELD] !== false
   on('session.start', async ($, e, next) => {
     cwd = e.cwd
     await $.command.register({
@@ -1074,7 +1090,9 @@ export const register: Register = on => {
       },
       session: {
         icon: '◌', title: 'No PRs in this session yet',
-        hint: 'PRs this session creates or mentions show up here automatically.',
+        hint: hideMerged
+          ? 'PRs this session creates or mentions show up here automatically. Merged ones are hidden.'
+          : 'PRs this session creates or mentions show up here automatically.',
       },
     }
     const copy = EMPTY_COPY[current]
@@ -1100,6 +1118,11 @@ export const register: Register = on => {
       <Box flexDirection="column" width={width}>
         {only ? null : tabRow}
         {status}
+        {current === 'session' ? (
+          <Button key="toggle-merged" hotkey="h" onPress={() => toggleHideMerged($)}>
+            <Text dimColor>{hideMerged ? 'Merged PRs hidden · show them' : 'Merged PRs shown · hide them'}</Text>
+          </Button>
+        ) : null}
         {rows.length ? rows : emptyState}
       </Box>
     )

@@ -17,5 +17,13 @@
     "ci",
     "worktree"
   ],
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "hideMergedSessionPrs": {
+      "type": "boolean",
+      "title": "Hide merged session PRs",
+      "description": "Leave this session's merged PRs out of the line above the prompt and the Session tab.",
+      "default": true
+    }
+  }
 }

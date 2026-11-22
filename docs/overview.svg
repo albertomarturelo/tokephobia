@@ -17,8 +17,8 @@
 <text x="622.0" y="109" fill="#16161e" font-weight="700">#42</text>
 <text x="647.8" y="109" fill="#ffd75f"> ⏳</text>
 <text x="673.6" y="109" fill="#d4d4d8"> ] [ #38</text>
-<text x="742.4" y="109" fill="#d787d7"> merged</text>
-<text x="802.6" y="109" fill="#d4d4d8"> ]</text>
+<text x="742.4" y="109" fill="#5fd787"> ✓</text>
+<text x="768.2" y="109" fill="#d4d4d8"> ]</text>
 <line x1="20" x2="862.8" y1="126" y2="126" stroke="#3a3a46"/>
 <text x="20.0" y="153" fill="#7c8190">&gt; </text>
 <text x="37.2" y="153" fill="#7c8190">▌</text>
