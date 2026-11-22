@@ -167,17 +167,43 @@ test('helpers: log tail stops at the error, durations, grouping', () => {
   expect(others).toHaveLength(1)
 })
 
-test('the band shows the newest session PRs and a +N for the rest', async ($, on) => {
-  const prs = [1, 2, 4, 5, 6, 7].map(n => ({ number: n, url: `https://github.com/${REPO}/pull/${n}`, repo: REPO, created: true }))
+test('the band shows the newest session PRs and a +N for the rest, leaving merged ones out', async ($, on) => {
+  const prs = [1, 2, 3, 4, 5, 6, 7].map(n => ({ number: n, url: `https://github.com/${REPO}/pull/${n}`, repo: REPO, created: true }))
   await start($, on, path =>
     path.includes('/sessions/') ? JSON.stringify({ prs })
       : path.endsWith('__7.json') ? JSON.stringify({ state: 'OPEN', checks: 'pending' })
-      : JSON.stringify({ state: 'MERGED' }))
+      : path.endsWith('__3.json') ? JSON.stringify({ state: 'MERGED' })
+      : JSON.stringify({ state: 'OPEN' }))
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text', text: /session/ })).toBeFalsy()
   expect(await ui.find({ type: 'Text', text: /^#7$/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /^#1$/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /^#3$/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: /merged/ })).toBeFalsy()
   expect(await ui.find({ type: 'Text', text: /\+2/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('with hideMergedSessionPrs off, merged session PRs stay on the band', { options: { hideMergedSessionPrs: false } }, async ($, on) => {
+  const prs = [{ number: 3, url: `https://github.com/${REPO}/pull/3`, repo: REPO, created: true }]
+  await start($, on, path => path.includes('/sessions/') ? JSON.stringify({ prs }) : JSON.stringify({ state: 'MERGED' }))
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /^#3$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /merged/ })).toBeTruthy()
+  await ui.unmount()
+})
+
+test('the Session tab flips hideMergedSessionPrs through /config', async ($, on) => {
+  const set: unknown[] = []
+  // Stands in for the settings writer beneath the plugins.
+  on('config.set', { key: 'tokephobia.hideMergedSessionPrs' }, (_: unknown, e: { key: string; value: unknown }) => (set.push([e.key, e.value]), { value: e.value }))
+  on('config.list', () => ({ value: [{ key: 'tokephobia.hideMergedSessionPrs', label: 'Hide merged session PRs', kind: 'toggle', value: true, provider: { plugin: 'tokephobia', tier: 'user' }, isLocked: false }] }))
+  await start($, on)
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  await ui.press({ key: 'tab-session' })
+  expect(await ui.find({ type: 'Text', text: /Merged PRs hidden/ })).toBeTruthy()
+  await ui.press({ key: 'toggle-merged' })
+  expect(set).toEqual([['tokephobia.hideMergedSessionPrs', false]])
   await ui.unmount()
 })
 
