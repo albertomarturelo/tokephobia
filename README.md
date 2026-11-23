@@ -152,6 +152,7 @@ npm run typecheck    # tsc --noEmit
 claude plugin validate plugin
 ```
 
+- Before opening a pull request, run `npm test` and `npm run typecheck`.
 - **Live testing:** to try a change in real sessions, run `node bin/tokephobia.mjs install` from the checkout you're working in.
 - **Cache:** it lives in `~/.cache/tokephobia/`, with each transcript's progress in `sessions/` and each PR's state in `prs/`. Override the location with `TOKEPHOBIA_CACHE_DIR`.
 - **Raw payloads:** `scripts/capture-statusline.mjs` is a diagnostic status line that saves the raw JSON Claude Code sends to `fixtures/captures/`, which is git-ignored. Use it to see what a new Claude Code version sends.
