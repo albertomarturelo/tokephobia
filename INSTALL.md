@@ -5,23 +5,19 @@ These are step-by-step instructions for a coding agent such as Claude Code. Foll
 ## What gets installed
 
 - **Status line:** `statusLine` in the Claude Code user settings runs `node <clone>/bin/tokephobia.mjs`.
-- **Plugin:** `<clone>/plugin` is added to `env.CLAUDE_CODE_PLUGIN_DIRS` in the same file. It provides the GitHub line above the prompt and `/gh`.
 
-Both point into the clone, so the clone must stay where you put it. The default location is `~/.local/share/tokephobia`.
+It points into the clone, so the clone must stay where you put it. The default location is `~/.local/share/tokephobia`.
 
 ## 1. Check the requirements
 
 ```sh
 node --version     # needs v24 or later
 git --version
-gh auth status     # needs a logged-in account
 ```
 
 | If | Then |
 |---|---|
 | `node` is missing or older than v24 | Stop. Ask the user to install Node 24+ (for example `brew install node`). Don't install it yourself without asking. |
-| `gh` is missing | Ask the user to install the [GitHub CLI](https://cli.github.com). The status line works without it, but the GitHub line and PR state don't. |
-| `gh auth status` says not logged in | Ask the user to run `! gh auth login` themselves; it's interactive. |
 
 ## 2. Get the code
 
@@ -48,13 +44,12 @@ On success it prints lines like these:
 ```
 ✓ statusLine → node /Users/you/.local/share/tokephobia/bin/tokephobia.mjs
   previous statusLine backed up to /Users/you/.claude/settings.json.bak-tokephobia-2026-11-21T20-00-00-000Z
-✓ plugin → CLAUDE_CODE_PLUGIN_DIRS += /Users/you/.local/share/tokephobia/plugin
   in /Users/you/.claude/settings.json
 ```
 
 - **"tokephobia was already installed":** also success; running it again changes nothing.
 - **"backed up":** the user had another status line. Tell them where the backup is.
-- **Plugin opt-out:** if the user wants only the status line, add `--no-plugin`.
+- **"removed the old GitHub plugin":** an earlier install had added tokephobia's GitHub plugin; it moved to [claude-gh](https://github.com/albertomarturelo/claude-gh). Tell the user they can install that if they want the session's PRs above the prompt.
 - **Other config locations:** it writes to `$CLAUDE_CONFIG_DIR/settings.json` when that variable is set, otherwise to `~/.claude/settings.json`. Use `--settings <path>` for another file, for example a project's `.claude/settings.json`.
 - **Errors:** if it fails with a JSON error, the settings file is invalid. It is never overwritten in that case; show the error to the user.
 
@@ -76,16 +71,15 @@ It should print two lines:
 Then check the settings:
 
 ```sh
-node -e 'const s=require(process.argv[1]);console.log(s.statusLine?.command);console.log(s.env?.CLAUDE_CODE_PLUGIN_DIRS)' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
+node -e 'const s=require(process.argv[1]);console.log(s.statusLine?.command)' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json"
 ```
 
-Both lines should mention `tokephobia`; the second is `undefined` with `--no-plugin`.
+It should mention `tokephobia`.
 
 ## 5. Tell the user
 
 - **Status line:** open sessions show it on their next refresh.
-- **GitHub line and `/gh`:** they load in Claude Code sessions started from now on, so the user needs to start a new session to see them.
-- **How to use it:** press a count in the GitHub line to open that list, press a session PR to see its CI, reviews and description, and run `/gh` for every tab.
+- **GitHub:** for this session's PRs above the prompt, they can install [claude-gh](https://github.com/albertomarturelo/claude-gh).
 
 ## Update
 
@@ -101,4 +95,4 @@ No reinstall is needed; the settings already point into the clone.
 node "$HOME/.local/share/tokephobia/bin/tokephobia.mjs" uninstall
 ```
 
-It removes only tokephobia's status line and plugin entry. To bring back a previous status line, copy its `statusLine` block from the `settings.json.bak-tokephobia-*` backup. The clone can then be deleted.
+It removes only tokephobia's status line (and the old plugin entry, if an earlier install left one). To bring back a previous status line, copy its `statusLine` block from the `settings.json.bak-tokephobia-*` backup. The clone can then be deleted.

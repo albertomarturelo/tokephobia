@@ -1,12 +1,13 @@
 # tokephobia
 
-**A status line and GitHub plugin for [Claude Code](https://code.claude.com), built for running several sessions in parallel, each in its own worktree.**
+**A status line for [Claude Code](https://code.claude.com), built for running several sessions in parallel, each in its own worktree.**
 
-![Claude Code with tokephobia: the GitHub line above the prompt, the status line below it](docs/overview.svg)
+![Claude Code with tokephobia: the status line below the prompt](docs/overview.svg)
 
 - **Know where each session is working.** tokephobia shows the worktree and branch the session actually works in, not the folder it was launched from.
 - **Watch the budget.** It shows context left, plan usage and when it resets, and the model with its reasoning effort.
-- **Keep GitHub one key away.** The repo's issues, PRs and milestones, and the PRs this session opened, sit above the prompt. Press one to see its CI, reviews and description without leaving the terminal.
+
+For this session's PRs above the prompt, see [claude-gh](https://github.com/albertomarturelo/claude-gh).
 
 ## Quickstart
 
@@ -28,20 +29,7 @@ git clone https://github.com/albertomarturelo/tokephobia.git ~/.local/share/toke
 node ~/.local/share/tokephobia/bin/tokephobia.mjs install
 ```
 
-Then start a new Claude Code session. You need **Node.js 24+**, `git`, and [`gh`](https://cli.github.com) logged in. There is nothing to build and there are no dependencies to install.
-
-### Only the GitHub plugin
-
-If you just want the GitHub line and pane, without the status line, install the plugin from Claude Code:
-
-```text
-/plugin install tokephobia --marketplace albertomarturelo/tokephobia
-```
-
-Answer `y` to add the marketplace, then pick a scope. From a shell, use `claude plugin install tokephobia --marketplace albertomarturelo/tokephobia`.
-
-- **Session PRs:** the plugin learns them from the status line, so without it the line shows the repo's issues, PRs and milestones only.
-- **Install one way only:** if you also install the status line, run `tokephobia install --no-plugin`, so the plugin isn't loaded twice.
+Then start a new Claude Code session. You need **Node.js 24+** and `git`. There is nothing to build and there are no dependencies to install.
 
 ## What you see
 
@@ -63,53 +51,6 @@ Claude Code only tells a status line which folder a session was **launched** in.
 
 **Where plan usage comes from.** Claude Code only passes the status line the 5-hour and weekly windows, and only once a response has reported them. The per-model weeks are in claude.ai's usage report, the one `/usage` shows. On a claude.ai subscription, tokephobia fetches that report in the background every 3 minutes with Claude Code's own login (read from the macOS Keychain, or `~/.claude/.credentials.json` elsewhere), sends it only to `api.anthropic.com`, and keeps just the percentages and reset times in its cache. macOS may ask once whether `security` can read the `Claude Code-credentials` item: choose **Always Allow**. Set `TOKEPHOBIA_NO_USAGE=1` to turn it off and show only what Claude Code passes.
 
-### GitHub above the prompt
-
-```
-[ main ↓3 ⟳ ] · GitHub · acme/app [ Issues 23 ] [ PRs 4 1✗ ] [ v2.3 62% ] · session [ #42 ⏳ ] [ #38 ✓ ]
-```
-
-- **Base branch:** where the main checkout's `main` (origin's default branch) stands against origin: `✓` up to date, `↓3` behind, `↑1` with local commits, `✎` uncommitted changes, `⚠` the last fetch failed. It fetches every 2 minutes, which only moves remote refs. Pressing it (or `s`) syncs, fast-forward only: `git pull --ff-only` when the main checkout has `main` out and is clean, `git fetch origin main:main` when it's on another branch. With uncommitted changes, or when `main` has diverged, it does nothing and says why. Merging a PR into `main` from the pane syncs it too. Hidden while `/gh owner/repo` shows another repo.
-- **Repo counts:** open issues, open PRs (and how many fail CI), and the nearest milestone's progress.
-- **Session PRs:** the PRs this session created or mentioned, with their state: `✓` CI passing, `✗` failing, `⏳` running, `merged`, `closed`. PRs it only mentioned are dimmed. Merged PRs are hidden by default: turn **Hide merged session PRs** off in `/config`, or press `h` in the Session tab, to see them.
-
-Press an entry with the mouse, or press `ctrl+x tab` and then `s`, `i`, `p` or `m`. A count opens a pane with only that list; pressing it again closes it.
-
-![The pane on the Pull requests tab, listing open PRs with their CI and review state](docs/pane.svg)
-
-`/gh` opens the pane with every tab: Issues, Pull requests, Milestones and Session. Switch tabs with `1` to `4`, and press `r` to refresh. `/gh owner/repo` looks at another repo, and `/gh auto` goes back to the session's. An empty tab says so and links to create one on GitHub.
-
-### Issue and PR detail
-
-![The detail view of a PR: state, branch, CI checks, reviews and description](docs/pr-detail.svg)
-
-Press an issue or PR, from a list or from the session PRs, to read it in the pane:
-
-- **State:** `● Merged by @x 2h ago`, `● Closed without merging`, or `● Open` with whether it can merge (ready, has conflicts, blocked, behind the base branch).
-- **Change:** branch, base, lines added and removed, and files changed.
-- **CI:** grouped by workflow, failing ones first, with how many jobs failed and how long it took. Checks from outside GitHub Actions are listed as they are.
-- **Reviews:** each reviewer's latest review.
-- **Description:** the body, rendered as Markdown.
-
-`← back` (`b`) returns to the tabs, **Open on GitHub** (`o`) opens it in the browser, and **↻ Refresh** (`r`) reloads it. A PR with checks still running refreshes by itself every 20 seconds.
-
-**⇥ Merge** (`m`) merges an open PR from the pane. It first asks which method to use, offering only those the repo allows: squash (`s`), merge commit (`c`) or rebase (`e`). Drafts and PRs with conflicts say why they can't be merged instead. If you're an admin of the repo, the question also offers **Merge as admin** (`a`), which merges with `gh pr merge --admin`, bypassing required reviews and checks. It starts off.
-
-### Milestones
-
-Press a milestone in the Milestones tab to see its progress, due date (in red once it's overdue), description and issues: open ones first, then the latest closed. Press an issue to read it; `← back` returns to the milestone.
-
-### Workflow runs
-
-Press a workflow in a PR's CI section to see its run:
-
-- **Jobs:** each one with its duration. Pressing a job opens it on GitHub.
-- **Failures:** the steps that failed, and the end of each failed job's log, up to the error.
-- **Running workflows:** the view refreshes every 10 seconds while it runs.
-- **Re-run failed jobs** (`f`): it asks before calling `gh run rerun --failed`, because that starts CI again on GitHub.
-
-In fullscreen mode, from 110 columns wide, the pane docks beside the conversation; otherwise it opens above the prompt.
-
 ## How it works
 
 ```
@@ -117,23 +58,18 @@ Claude Code ──JSON on stdin──▶ bin/tokephobia.mjs ──▶ status lin
                                   │  reads the session transcript incrementally
                                   │  runs git in the active worktree
                                   ▼
-                          ~/.cache/tokephobia ◀── gh (background, PR state + CI)
-                                  │
-                                  ▼
-                    plugin/ (GitHub line, pane, /gh) ──▶ gh (repo issues, PRs, milestones)
+                          ~/.cache/tokephobia (transcript progress, plan usage)
 ```
 
 - **Active worktree:** the `git worktree list` entry that holds the last place the session *worked*. That means files it edited or wrote, and `cd`, `git -C` and `git worktree add` targets in commands it ran. Reads, heredoc bodies and quoted text don't count. If there is none, it uses the launch folder.
-- **Session PRs:** Claude Code records them in the transcript (`pr-link` entries, and `gitOperation.pr` for PRs it created).
-- **PR state and CI:** a background `gh` process fetches them, every 60 seconds while a PR is open and every 15 minutes once it is closed. The result is cached and shared with the plugin, so the status line never waits on the network.
 - **Separate sessions:** each one reads only its own transcript, so parallel sessions never mix.
 
 ## Install details
 
-`tokephobia install` changes two things in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`) and leaves everything else as is:
+`tokephobia install` sets one thing in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`) and leaves everything else as is:
 
 - **`statusLine`** runs `bin/tokephobia.mjs`. A status line that isn't tokephobia is first backed up to `settings.json.bak-tokephobia-<date>`.
-- **`env.CLAUDE_CODE_PLUGIN_DIRS`** gets the `plugin/` folder appended, so every new session loads the GitHub line and `/gh`. Add `--no-plugin` to skip it.
+- **Old GitHub plugin:** earlier versions also added their `plugin/` folder to `env.CLAUDE_CODE_PLUGIN_DIRS`. `install` and `uninstall` take that entry out and leave the others; the plugin is now [claude-gh](https://github.com/albertomarturelo/claude-gh).
 
 Other options and commands:
 
@@ -147,13 +83,11 @@ Other options and commands:
 ```sh
 npm install          # dev tools only: typescript, @types/node
 npm test             # status line tests (node --test)
-npm run test:plugin  # plugin tests (claude plugin test)
 npm run typecheck    # tsc --noEmit
-claude plugin validate plugin
 ```
 
 - **Live testing:** to try a change in real sessions, run `node bin/tokephobia.mjs install` from the checkout you're working in.
-- **Cache:** it lives in `~/.cache/tokephobia/`, with each transcript's progress in `sessions/` and each PR's state in `prs/`. Override the location with `TOKEPHOBIA_CACHE_DIR`.
+- **Cache:** it lives in `~/.cache/tokephobia/`, with each transcript's progress in `sessions/` and the plan usage report in `usage.json`. Override the location with `TOKEPHOBIA_CACHE_DIR`.
 - **Raw payloads:** `scripts/capture-statusline.mjs` is a diagnostic status line that saves the raw JSON Claude Code sends to `fixtures/captures/`, which is git-ignored. Use it to see what a new Claude Code version sends.
 - **Images:** the pictures in `docs/` are SVG mockups of the real output.
 

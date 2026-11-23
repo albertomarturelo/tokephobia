@@ -7,42 +7,30 @@
 //   `cd` / `git -C` / `git worktree add` targets in Bash commands. Reads and
 //   other path mentions don't count. The active worktree is resolved from these
 //   at render time.
-// - prs: PRs linked to the session. Claude Code records them itself as
-//   `{"type":"pr-link", prNumber, prUrl, prRepository}` entries, and marks the
-//   ones the session created via `toolUseResult.gitOperation.pr.action === "created"`.
 
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 
-export interface TranscriptPR {
-  number: number;
-  url: string;
-  repo: string;
-  created: boolean;
-}
-
 export interface TranscriptState {
-  version: 3;
+  version: 4;
   transcriptPath: string;
   /** Byte offset just past the last fully processed line. */
   offset: number;
   recentPaths: string[];
-  prs: TranscriptPR[];
-  lastPushBranch?: string;
 }
 
 const MAX_RECENT_PATHS = 40;
 // Cheap pre-filter so most lines never hit JSON.parse.
-const INTERESTING = /"tool_use"|"pr-link"|"gitOperation"/;
+const INTERESTING = /"tool_use"/;
 
 export function emptyState(transcriptPath: string): TranscriptState {
-  return { version: 3, transcriptPath, offset: 0, recentPaths: [], prs: [] };
+  return { version: 4, transcriptPath, offset: 0, recentPaths: [] };
 }
 
 /** Reads whatever was appended since `state.offset` and folds it into a new state. */
 export function scanTranscript(prev: TranscriptState | undefined, transcriptPath: string): TranscriptState {
-  let state = prev && prev.version === 3 && prev.transcriptPath === transcriptPath ? clone(prev) : emptyState(transcriptPath);
+  let state = prev && prev.version === 4 && prev.transcriptPath === transcriptPath ? clone(prev) : emptyState(transcriptPath);
 
   let fd: number;
   try {
@@ -78,15 +66,6 @@ export function scanTranscript(prev: TranscriptState | undefined, transcriptPath
 export function applyEntry(state: TranscriptState, entry: any): void {
   if (!entry || typeof entry !== "object") return;
 
-  if (entry.type === "pr-link" && typeof entry.prUrl === "string") {
-    addPr(state, entry.prUrl, entry.prNumber, entry.prRepository, false);
-    return;
-  }
-
-  const gitOp = entry.toolUseResult?.gitOperation;
-  if (gitOp?.pr?.url) addPr(state, gitOp.pr.url, gitOp.pr.number, undefined, gitOp.pr.action === "created");
-  if (typeof gitOp?.push?.branch === "string") state.lastPushBranch = gitOp.push.branch;
-
   const content = entry.message?.content;
   if (!Array.isArray(content)) return;
   const cwd: string | undefined = typeof entry.cwd === "string" ? entry.cwd : undefined;
@@ -95,21 +74,6 @@ export function applyEntry(state: TranscriptState, entry: any): void {
       for (const p of workingPathsFromToolCall(String(block.name ?? ""), block.input, cwd)) pushRecent(state, p);
     }
   }
-}
-
-function addPr(state: TranscriptState, url: string, number: unknown, repo: unknown, created: boolean): void {
-  const m = url.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
-  const existing = state.prs.find((p) => p.url === url);
-  if (existing) {
-    existing.created ||= created;
-    return;
-  }
-  state.prs.push({
-    url,
-    number: typeof number === "number" ? number : Number(m?.[2] ?? 0),
-    repo: typeof repo === "string" ? repo : (m?.[1] ?? ""),
-    created,
-  });
 }
 
 function pushRecent(state: TranscriptState, path: string): void {
@@ -232,5 +196,5 @@ function toAbsolute(p: string, base: string | undefined): string | undefined {
 }
 
 function clone(s: TranscriptState): TranscriptState {
-  return { ...s, recentPaths: [...s.recentPaths], prs: s.prs.map((p) => ({ ...p })) };
+  return { ...s, recentPaths: [...s.recentPaths] };
 }

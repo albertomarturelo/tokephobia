@@ -34,22 +34,23 @@ test("reinstalling over a tokephobia status line makes no backup", () => {
   assert.equal(readdirSync(dir).filter((f) => f.startsWith("reinstall.json.bak")).length, 0);
 });
 
-test("install adds the plugin dir to CLAUDE_CODE_PLUGIN_DIRS, keeping other dirs and env", () => {
+test("install takes the old plugin dir out of CLAUDE_CODE_PLUGIN_DIRS, keeping other dirs and env", () => {
   const file = join(dir, "plugin.json");
-  writeFileSync(file, JSON.stringify({ env: { FOO: "1", [PLUGIN_DIRS_ENV]: "/other/plugin" } }));
-  install(file, { command: CMD, pluginDir: PLUGIN });
-  assert.deepEqual(read(file).env, { FOO: "1", [PLUGIN_DIRS_ENV]: ["/other/plugin", PLUGIN].join(delimiter) });
+  writeFileSync(file, JSON.stringify({ statusLine: { type: "command", command: CMD }, env: { FOO: "1", [PLUGIN_DIRS_ENV]: ["/other/plugin", PLUGIN].join(delimiter) } }));
+  const r = install(file, { command: CMD, legacyPluginDir: PLUGIN });
+  assert.deepEqual([r.changed, r.statusLineChanged, r.pluginRemoved], [true, false, true]);
+  assert.deepEqual(read(file).env, { FOO: "1", [PLUGIN_DIRS_ENV]: "/other/plugin" });
 
-  const again = install(file, { command: CMD, pluginDir: PLUGIN });
-  assert.deepEqual([again.changed, again.pluginChanged], [false, false]);
+  const again = install(file, { command: CMD, legacyPluginDir: PLUGIN });
+  assert.deepEqual([again.changed, again.pluginRemoved], [false, false]);
 });
 
-test("install creates the settings file when missing", () => {
+test("install never adds a plugin dir", () => {
   const file = join(dir, "fresh.json");
-  const r = install(file, { command: CMD, pluginDir: PLUGIN });
+  const r = install(file, { command: CMD, legacyPluginDir: PLUGIN });
   assert.equal(r.backup, undefined);
-  assert.equal(read(file).statusLine.command, CMD);
-  assert.equal(read(file).env[PLUGIN_DIRS_ENV], PLUGIN);
+  assert.equal(r.pluginRemoved, false);
+  assert.deepEqual(read(file), { statusLine: { type: "command", command: CMD, padding: 0 } });
 });
 
 test("invalid JSON is never overwritten", () => {
@@ -59,11 +60,11 @@ test("invalid JSON is never overwritten", () => {
   assert.equal(readFileSync(file, "utf8"), "{ not json");
 });
 
-test("uninstall removes only tokephobia's status line and plugin dir", () => {
+test("uninstall removes tokephobia's status line and the old plugin dir, nothing else", () => {
   const file = join(dir, "uninstall.json");
-  writeFileSync(file, JSON.stringify({ env: { [PLUGIN_DIRS_ENV]: "/other/plugin" } }));
-  install(file, { command: CMD, pluginDir: PLUGIN });
-  assert.equal(uninstall(file, PLUGIN).removed, true);
+  writeFileSync(file, JSON.stringify({ statusLine: { type: "command", command: CMD }, env: { [PLUGIN_DIRS_ENV]: ["/other/plugin", PLUGIN].join(delimiter) } }));
+  const r = uninstall(file, PLUGIN);
+  assert.deepEqual([r.removed, r.pluginRemoved], [true, true]);
   assert.equal(read(file).statusLine, undefined);
   assert.deepEqual(read(file).env, { [PLUGIN_DIRS_ENV]: "/other/plugin" });
 });
@@ -75,10 +76,10 @@ test("uninstall leaves a foreign status line alone", () => {
   assert.ok(read(file).statusLine);
 });
 
-test("an emptied env block is removed", () => {
+test("an env block emptied by the migration is removed", () => {
   const file = join(dir, "empty-env.json");
-  install(file, { command: CMD, pluginDir: PLUGIN });
-  uninstall(file, PLUGIN);
+  writeFileSync(file, JSON.stringify({ env: { [PLUGIN_DIRS_ENV]: PLUGIN } }));
+  install(file, { command: CMD, legacyPluginDir: PLUGIN });
   assert.equal(read(file).env, undefined);
 });
 

@@ -44,7 +44,7 @@ test("cd targets with globs or variables are ignored", () => {
   assert.deepEqual(workingPathsFromCommand("cd $HOME/x && cd /p/*/y", "/p"), []);
 });
 
-test("collects tool paths and PRs, marks created ones, and resumes from the offset", () => {
+test("collects tool paths and resumes from the offset", () => {
   const file = join(dir, "s1.jsonl");
   writeFileSync(
     file,
@@ -55,13 +55,6 @@ test("collects tool paths and PRs, marks created ones, and resumes from the offs
   );
   const s1 = scanTranscript(undefined, file);
   assert.equal(s1.recentPaths.at(-1), "/p/repo-7");
-  assert.deepEqual(
-    s1.prs.map((p) => [p.number, p.created]),
-    [
-      [41, false],
-      [42, true],
-    ],
-  );
 
   // Append a partial line: must not be consumed until it is complete.
   const editLine = line({ type: "assistant", message: { content: [{ type: "tool_use", name: "Edit", input: { file_path: "/p/repo/src/a.ts" } }] } });
@@ -72,7 +65,6 @@ test("collects tool paths and PRs, marks created ones, and resumes from the offs
   appendFileSync(file, editLine.slice(20));
   const s3 = scanTranscript(s2, file);
   assert.equal(s3.recentPaths.at(-1), "/p/repo/src/a.ts");
-  assert.equal(s3.prs.length, 2);
 });
 
 test("truncated transcript resets the state", () => {
