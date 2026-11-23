@@ -8,7 +8,6 @@ import { readContext } from "./context.ts";
 import { readGitInfo } from "./git.ts";
 import { launchDir, parseInput, type StatusLineInput } from "./input.ts";
 import { readLimits } from "./limits.ts";
-import { withStatus } from "./prs.ts";
 import { render } from "./render.ts";
 import { scanTranscript, type TranscriptState } from "./transcript.ts";
 import { cachedUsageLimits, mergeLimits } from "./usage.ts";
@@ -33,9 +32,6 @@ process.stdin.on("end", () => {
 
     // The session may be working in a sibling worktree it created; launch dir is only the fallback.
     const workDir = (launch && session && pickActiveWorktree(session.recentPaths, listWorktrees(launch))) || launch;
-    // PRs are shown by the plugin's GitHub line (pressable), not here. Calling
-    // withStatus still keeps their state/CI cache fresh, which the plugin reads.
-    if (session) withStatus(session.prs);
     // rate_limits only comes on a claude.ai subscription: only then is there a usage report to read.
     const limits = input.rate_limits ? mergeLimits(readLimits(input), cachedUsageLimits()) : readLimits(input);
 

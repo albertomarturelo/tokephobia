@@ -1,7 +1,7 @@
 {
   "name": "tokephobia",
-  "version": "0.1.0",
-  "description": "Worktree-aware Claude Code status line and GitHub plugin: branch, context left, plan usage, and the repo's and session's issues and PRs.",
+  "version": "0.2.0",
+  "description": "Worktree-aware Claude Code status line: branch, context left, plan usage and model.",
   "type": "module",
   "private": true,
   "bin": {
@@ -15,8 +15,7 @@
     "test": "node --test test/",
     "typecheck": "tsc --noEmit",
     "capture:show": "ls -la fixtures/captures",
-    "setup": "node bin/tokephobia.mjs install",
-    "test:plugin": "claude plugin test plugin"
+    "setup": "node bin/tokephobia.mjs install"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
@@ -33,7 +32,6 @@
   "keywords": [
     "claude-code",
     "statusline",
-    "git-worktree",
-    "github"
+    "git-worktree"
   ]
 }
