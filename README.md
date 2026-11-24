@@ -90,6 +90,7 @@ npm run typecheck    # tsc --noEmit
 - **Cache:** it lives in `~/.cache/tokephobia/`, with each transcript's progress in `sessions/` and the plan usage report in `usage.json`. Override the location with `TOKEPHOBIA_CACHE_DIR`.
 - **Raw payloads:** `scripts/capture-statusline.mjs` is a diagnostic status line that saves the raw JSON Claude Code sends to `fixtures/captures/`, which is git-ignored. Use it to see what a new Claude Code version sends.
 - **Images:** the pictures in `docs/` are SVG mockups of the real output.
+- **Releases:** main is protected, so a release takes two steps. On a branch, `npm run release -- bump <patch|minor|major|X.Y.Z>` sets the version in `package.json` and `package-lock.json`; merge that through a PR. Then on an up-to-date main, `npm run release -- publish` runs typecheck and tests, creates the annotated tag `vX.Y.Z`, pushes it and creates the GitHub release. By default GitHub writes the notes from the merged PRs; pass `--notes-file FILE` to use your own. `-m "summary"` adds a summary to the tag message, `--draft` creates the release as a draft and `--dry-run` shows the commands without running them.
 
 ## License
 

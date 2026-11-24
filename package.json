@@ -15,7 +15,8 @@
     "test": "node --test test/",
     "typecheck": "tsc --noEmit",
     "capture:show": "ls -la fixtures/captures",
-    "setup": "node bin/tokephobia.mjs install"
+    "setup": "node bin/tokephobia.mjs install",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
