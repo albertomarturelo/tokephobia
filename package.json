@@ -1,6 +1,6 @@
 {
   "name": "tokephobia",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Worktree-aware Claude Code status line: branch, context left, plan usage and model.",
   "type": "module",
   "private": true,
